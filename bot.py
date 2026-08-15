@@ -322,4 +322,19 @@ async def config_error(interaction: discord.Interaction, error: app_commands.App
 
 client.tree.add_command(grupo_config)
 
+
+@client.tree.error
+async def on_tree_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """Manejador global: evita que un comando falle en silencio y deja rastro en los logs."""
+    logger.exception("Error no manejado en un comando de aplicación", exc_info=error)
+    mensaje = "Ocurrió un error inesperado al ejecutar el comando. Revisa los logs del bot."
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(mensaje, ephemeral=True)
+        else:
+            await interaction.response.send_message(mensaje, ephemeral=True)
+    except discord.HTTPException:
+        pass
+
+
 client.run(TOKEN)
