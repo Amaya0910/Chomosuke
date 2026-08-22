@@ -47,6 +47,47 @@ class MemeCog(commands.Cog):
             ephemeral=True,
         )
 
+    @app_commands.command(name="memeahora", description="Manda un meme ahora mismo, sin esperar a la hora configurada (para probar)")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def meme_now(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        cfg = self.repo.get_config(interaction.guild_id)
+        if cfg is None:
+            await interaction.followup.send(
+                "Todavía no has configurado un canal de memes. Usa `/setmemechannel` primero.",
+                ephemeral=True,
+            )
+            return
+
+        meme = await self.fetcher.get_meme(cfg["subreddit"])
+        if meme is None:
+            await interaction.followup.send(
+                "No pude traer un meme ahora mismo (la fuente falló). Intenta de nuevo en un momento.",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            webhook = discord.Webhook.from_url(cfg["webhook_url"], client=self.bot)
+            embed = discord.Embed(title=meme["title"], url=meme["post_link"])
+            embed.set_image(url=meme["image_url"])
+            embed.set_footer(text=f"r/{meme['subreddit']}")
+            await webhook.send(embed=embed, username="Meme del día")
+        except discord.NotFound:
+            await interaction.followup.send(
+                "El webhook configurado ya no existe (puede que lo hayan borrado del canal). "
+                "Vuelve a correr `/setmemechannel` para crear uno nuevo.",
+                ephemeral=True,
+            )
+            return
+        except Exception as e:
+            logger.error(f"Error en /memeahora para guild {interaction.guild_id}: {e}")
+            await interaction.followup.send("Ocurrió un error al enviar el meme.", ephemeral=True)
+            return
+
+        await interaction.followup.send("Meme enviado.", ephemeral=True)
+
     @tasks.loop(minutes=1)
     async def daily_meme(self):
         now = datetime.datetime.utcnow()
