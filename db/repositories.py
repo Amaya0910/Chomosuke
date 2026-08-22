@@ -1,3 +1,5 @@
+"""repositories.py"""
+
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Optional
@@ -75,3 +77,61 @@ class SQLiteGuildConfigRepository(GuildConfigRepository):
         return self.db.fetchall(
             "SELECT guild_id, proximo_bump FROM guild_config WHERE proximo_bump IS NOT NULL"
         )
+
+
+class MemeConfigRepository(ABC):
+    """Puerto para persistir la configuración de memes diarios por servidor."""
+
+    @abstractmethod
+    def set_config(self, guild_id: int, channel_id: int, webhook_url: str,
+                   hour: int, minute: int, subreddit: Optional[str]) -> None: ...
+
+    @abstractmethod
+    def get_config(self, guild_id: int): ...
+
+    @abstractmethod
+    def get_all_configs(self): ...
+
+
+class SQLiteMemeConfigRepository(MemeConfigRepository):
+    """Implementación concreta sobre SQLite (una fila por servidor)."""
+
+    def __init__(self, database: Database):
+        self.db = database
+        self._init_schema()
+
+    def _init_schema(self):
+        self.db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS meme_config (
+                guild_id INTEGER PRIMARY KEY,
+                channel_id INTEGER NOT NULL,
+                webhook_url TEXT NOT NULL,
+                hour INTEGER NOT NULL DEFAULT 12,
+                minute INTEGER NOT NULL DEFAULT 0,
+                subreddit TEXT
+            )
+            """
+        )
+
+    def set_config(self, guild_id: int, channel_id: int, webhook_url: str,
+                   hour: int, minute: int, subreddit: Optional[str] = None) -> None:
+        self.db.execute(
+            """
+            INSERT INTO meme_config (guild_id, channel_id, webhook_url, hour, minute, subreddit)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET
+                channel_id = excluded.channel_id,
+                webhook_url = excluded.webhook_url,
+                hour = excluded.hour,
+                minute = excluded.minute,
+                subreddit = excluded.subreddit
+            """,
+            (guild_id, channel_id, webhook_url, hour, minute, subreddit),
+        )
+
+    def get_config(self, guild_id: int):
+        return self.db.fetchone("SELECT * FROM meme_config WHERE guild_id = ?", (guild_id,))
+
+    def get_all_configs(self):
+        return self.db.fetchall("SELECT * FROM meme_config")
