@@ -40,7 +40,7 @@ class MemeCog(commands.Cog):
     @app_commands.describe(
         canal="Canal donde se publicarán los memes",
         hora="Hora del primer meme del día (0-23, UTC)",
-        cantidad="Cuántos memes al día, distribuidos a lo largo del día (1-10)",
+        cantidad="Cuántos memes al día, distribuidos a lo largo del día (1-100)",
         subreddit="Subreddit opcional (si no lo pones, se eligen memes en español al azar)",
     )
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -54,7 +54,7 @@ class MemeCog(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        cantidad = max(1, min(cantidad, 10))  # protege contra spam accidental
+        cantidad = max(1, min(cantidad, 100))  # protege contra spam accidental
 
         webhooks = await canal.webhooks()
         webhook = discord.utils.get(webhooks, name="Meme Bot")
