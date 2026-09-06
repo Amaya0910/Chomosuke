@@ -12,7 +12,10 @@ MEME_API_URL = "https://meme-api.com/gimme"
 # funcionar o no te gusta, puedes agregar/quitar de esta lista sin
 # tocar el resto del código.
 SPANISH_SUBREDDITS = [
-    "SpanishMeme",
+    "MAAU",
+    "DylanteroYT",
+    "BeelcitosMemes",
+    "Carola",
     "memexico",
     "memes_de_pobres",
     "dankgentina",
