@@ -39,7 +39,7 @@ class MemeCog(commands.Cog):
     @app_commands.command(name="setmemechannel", description="Configura el canal y la cantidad de memes diarios")
     @app_commands.describe(
         canal="Canal donde se publicarán los memes",
-        hora="Hora del primer Bot momazos (0-23, UTC)",
+        hora="Hora del primer Michi momazos (0-23, UTC)",
         cantidad="Cuántos memes al día, distribuidos a lo largo del día (1-100)",
         subreddit="Subreddit opcional (si no lo pones, se eligen memes en español al azar)",
     )
@@ -103,7 +103,7 @@ class MemeCog(commands.Cog):
             embed = discord.Embed(title=meme["title"], url=meme["post_link"])
             embed.set_image(url=meme["image_url"])
             embed.set_footer(text=f"r/{meme['subreddit']}")
-            await webhook.send(embed=embed, username="Bot momazos")
+            await webhook.send(embed=embed, username="Michi momazos")
         except discord.NotFound:
             await interaction.followup.send(
                 "El webhook configurado ya no existe (puede que lo hayan borrado del canal). "
@@ -133,7 +133,7 @@ class MemeCog(commands.Cog):
                     embed = discord.Embed(title=meme["title"], url=meme["post_link"])
                     embed.set_image(url=meme["image_url"])
                     embed.set_footer(text=f"r/{meme['subreddit']}")
-                    await webhook.send(embed=embed, username="Bot momazos")
+                    await webhook.send(embed=embed, username="Michi momazos")
                 except discord.NotFound:
                     logger.warning(f"Webhook inválido para guild {cfg['guild_id']}, fue borrado del canal.")
                 except Exception as e:
