@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from datetime import date
 
 from dotenv import load_dotenv
 
@@ -15,6 +16,8 @@ class Config:
     cooldown_seconds: int
     db_path: str
     bump_emoji: str
+    countdown_start: date
+    countdown_end: date
 
     @staticmethod
     def from_env() -> "Config":
@@ -36,4 +39,6 @@ class Config:
             cooldown_seconds=int(os.getenv("TIEMPO_ENFRIAMIENTO", "7200")),
             db_path=os.getenv("DB_PATH", "bumpbot.db"),
             bump_emoji=emoji,
+            countdown_start=date(2026, 8, 1),
+            countdown_end=date(2027, 8, 1),
         )
