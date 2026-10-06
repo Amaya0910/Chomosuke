@@ -18,6 +18,7 @@ from cogs.bump_config_commands import BumpConfigCog
 from cogs.alarm import AlarmCog
 from cogs.countdown import CountdownCog, CountdownConfigCog
 from cogs.meme import MemeCog
+from cogs.settings import SettingsCog
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("bump-bot")
@@ -51,6 +52,16 @@ class BumpBot(commands.Bot):
         await self.add_cog(CountdownConfigCog(self, self.countdown_repo))
         await self.add_cog(CountdownCog(self, self.countdown_repo, self.countdown_calculator))
         await self.add_cog(MemeCog(self, self.meme_repo, self.meme_fetcher))
+        await self.add_cog(
+            SettingsCog(
+                self,
+                self.config,
+                self.repo,
+                self.countdown_repo,
+                self.meme_repo,
+                self.countdown_calculator,
+            )
+        )
         synced = await self.tree.sync()
         logger.info(f"Comandos sincronizados: {[c.name for c in synced]}")
 
