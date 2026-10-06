@@ -1,3 +1,5 @@
+"""bot.py"""
+
 import logging
 
 import discord
@@ -5,15 +7,17 @@ from discord.ext import commands
 
 from config import Config
 from db.database import Database
-from db.repositories import SQLiteGuildConfigRepository
+from db.repositories import SQLiteGuildConfigRepository, SQLiteMemeConfigRepository
 from db.countdown_repository import SQLiteCountdownConfigRepository
 from services.disboard_classifier import DisboardMessageClassifier
 from services.scheduler import TimerScheduler
 from services.countdown_calculator import CountdownCalculator
+from services.meme_fetcher import MemeFetcher
 from cogs.bump import BumpCog
 from cogs.bump_config_commands import BumpConfigCog
 from cogs.alarm import AlarmCog
 from cogs.countdown import CountdownCog, CountdownConfigCog
+from cogs.meme import MemeCog
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("bump-bot")
@@ -34,9 +38,11 @@ class BumpBot(commands.Bot):
         self.database = Database(config.db_path)
         self.repo = SQLiteGuildConfigRepository(self.database)
         self.countdown_repo = SQLiteCountdownConfigRepository(self.database)
+        self.meme_repo = SQLiteMemeConfigRepository(self.database)
         self.scheduler = TimerScheduler()
         self.classifier = DisboardMessageClassifier()
         self.countdown_calculator = CountdownCalculator(config.countdown_start, config.countdown_end)
+        self.meme_fetcher = MemeFetcher()
 
     async def setup_hook(self):
         await self.add_cog(BumpCog(self, self.config, self.repo, self.scheduler, self.classifier))
@@ -44,7 +50,9 @@ class BumpBot(commands.Bot):
         await self.add_cog(AlarmCog(self, self.scheduler))
         await self.add_cog(CountdownConfigCog(self, self.countdown_repo))
         await self.add_cog(CountdownCog(self, self.countdown_repo, self.countdown_calculator))
-        await self.tree.sync()
+        await self.add_cog(MemeCog(self, self.meme_repo, self.meme_fetcher))
+        synced = await self.tree.sync()
+        logger.info(f"Comandos sincronizados: {[c.name for c in synced]}")
 
     async def on_ready(self):
         logger.info(f"Bot encendido y conectado como {self.user}")
