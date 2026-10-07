@@ -30,6 +30,12 @@ def _calcular_horarios(hora_inicio: int, cantidad: int) -> str:
     return ",".join(horarios)
 
 
+def _origen(meme: dict) -> str:
+    """Texto que indica de dónde viene el meme: lo define la propia fuente
+    ('origen') y, si no lo trae, se asume un subreddit."""
+    return meme.get("origen") or f"r/{meme['subreddit']}"
+
+
 class MemeCog(commands.Cog):
     def __init__(self, bot: commands.Bot, meme_repo, meme_service: MemeService):
         self.bot = bot
@@ -56,19 +62,19 @@ class MemeCog(commands.Cog):
     async def _enviar_imagen(webhook: discord.Webhook, meme: dict) -> None:
         embed = discord.Embed(title=meme["title"], url=meme["post_link"])
         embed.set_image(url=meme["media_url"])
-        embed.set_footer(text=f"r/{meme['subreddit']}")
+        embed.set_footer(text=_origen(meme))
         await webhook.send(embed=embed, username="Michi momazos")
 
     @staticmethod
     async def _enviar_video(webhook: discord.Webhook, meme: dict) -> None:
-        """Los embeds no reproducen video: se manda la URL del mp4 como texto
-        para que Discord muestre su reproductor. El enlace al post va entre
-        <> para que no genere una segunda vista previa."""
+        """Los embeds no reproducen video: se manda la URL del archivo como
+        texto para que Discord muestre su reproductor. El enlace al post va
+        entre <> para que no genere una segunda vista previa."""
         titulo = discord.utils.escape_markdown(meme["title"])[:LIMITE_TITULO]
         contenido = (
             f"**{titulo}**\n"
             f"{meme['media_url']}\n"
-            f"-# r/{meme['subreddit']} • <{meme['post_link']}>"
+            f"-# {_origen(meme)} • <{meme['post_link']}>"
         )
         await webhook.send(
             content=contenido,
@@ -125,7 +131,7 @@ class MemeCog(commands.Cog):
         canal="Canal donde se publicarán los memes",
         hora="Hora del primer Michi momazos (0-23, UTC)",
         cantidad="Cuántos memes al día, distribuidos a lo largo del día (1-100)",
-        subreddit="Subreddit opcional (si no lo pones, se eligen memes en español al azar)",
+        subreddit="Subreddit (imágenes) o comunidad de Lemmy nombre@instancia (videos). Opcional",
         tipo="Qué enviar: imagen, video o mixto (por defecto imagen)",
     )
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -173,10 +179,10 @@ class MemeCog(commands.Cog):
         await self._enviar_ahora(interaction, tipo, subreddit=None)
 
     @app_commands.command(name="memevideo", description="Manda un meme en video ahora mismo, sin esperar a la hora configurada")
-    @app_commands.describe(subreddit="Subreddit opcional (si no lo pones, usa el configurado o uno al azar)")
+    @app_commands.describe(comunidad="Comunidad de Lemmy opcional, ej. memes@lemmy.world (si no, usa la lista por defecto)")
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def meme_video(self, interaction: discord.Interaction, subreddit: str | None = None):
-        await self._enviar_ahora(interaction, TIPO_VIDEO, subreddit)
+    async def meme_video(self, interaction: discord.Interaction, comunidad: str | None = None):
+        await self._enviar_ahora(interaction, TIPO_VIDEO, comunidad)
 
     @tasks.loop(minutes=1)
     async def daily_meme(self):
