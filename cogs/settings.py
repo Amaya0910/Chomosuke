@@ -99,6 +99,7 @@ class SettingsCog(commands.Cog):
 
         return (
             f"**Canal:** <#{cfg['channel_id']}>\n"
+            f"**Tipo:** {cfg['media_mode']}\n"
             f"**Memes al día:** {len(horarios)}\n"
             f"**Horarios (UTC):** {horarios_txt}\n"
             f"**Subreddit:** {('r/' + cfg['subreddit']) if cfg['subreddit'] else 'Aleatorio en español'}"
