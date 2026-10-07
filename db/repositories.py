@@ -84,7 +84,7 @@ class MemeConfigRepository(ABC):
 
     @abstractmethod
     def set_config(self, guild_id: int, channel_id: int, webhook_url: str,
-                   times: str, subreddit: Optional[str]) -> None: ...
+                   times: str, subreddit: Optional[str], media_mode: str) -> None: ...
 
     @abstractmethod
     def get_config(self, guild_id: int): ...
@@ -98,6 +98,7 @@ class SQLiteMemeConfigRepository(MemeConfigRepository):
 
     `times` guarda una lista de horarios "HH:MM" separados por coma
     (ej. "09:00,15:00,21:00"), lo que permite varios memes al día.
+    `media_mode` indica qué tipo de meme se envía: imagen, video o mixto.
     """
 
     def __init__(self, database: Database):
@@ -114,39 +115,47 @@ class SQLiteMemeConfigRepository(MemeConfigRepository):
                 hour INTEGER NOT NULL DEFAULT 12,
                 minute INTEGER NOT NULL DEFAULT 0,
                 subreddit TEXT,
-                times TEXT
+                times TEXT,
+                media_mode TEXT NOT NULL DEFAULT 'imagen'
             )
             """
         )
-        self._migrar_columna_times()
+        self._migrar_columnas()
 
-    def _migrar_columna_times(self):
-        """Migración automática: si el bot ya tenía la tabla creada de antes
-        (sin la columna 'times'), la agrega y rellena las filas existentes
-        con su hour/minute actual, para no perder configuración previa."""
+    def _migrar_columnas(self):
+        """Migración automática: si el bot ya tenía la tabla creada de antes,
+        agrega las columnas que falten sin perder la configuración previa.
+
+        - 'times': se rellena con el hour/minute que ya tenía cada fila.
+        - 'media_mode': las filas existentes quedan en 'imagen'.
+        """
         columnas = [fila["name"] for fila in self.db.fetchall("PRAGMA table_info(meme_config)")]
         if "times" not in columnas:
             self.db.execute("ALTER TABLE meme_config ADD COLUMN times TEXT")
+        if "media_mode" not in columnas:
+            self.db.execute("ALTER TABLE meme_config ADD COLUMN media_mode TEXT NOT NULL DEFAULT 'imagen'")
         self.db.execute(
             "UPDATE meme_config SET times = printf('%02d:%02d', hour, minute) WHERE times IS NULL"
         )
 
     def set_config(self, guild_id: int, channel_id: int, webhook_url: str,
-                   times: str, subreddit: Optional[str] = None) -> None:
+                   times: str, subreddit: Optional[str] = None,
+                   media_mode: str = "imagen") -> None:
         primera_hora, primer_minuto = (int(x) for x in times.split(",")[0].split(":"))
         self.db.execute(
             """
-            INSERT INTO meme_config (guild_id, channel_id, webhook_url, hour, minute, subreddit, times)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO meme_config (guild_id, channel_id, webhook_url, hour, minute, subreddit, times, media_mode)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(guild_id) DO UPDATE SET
                 channel_id = excluded.channel_id,
                 webhook_url = excluded.webhook_url,
                 hour = excluded.hour,
                 minute = excluded.minute,
                 subreddit = excluded.subreddit,
-                times = excluded.times
+                times = excluded.times,
+                media_mode = excluded.media_mode
             """,
-            (guild_id, channel_id, webhook_url, primera_hora, primer_minuto, subreddit, times),
+            (guild_id, channel_id, webhook_url, primera_hora, primer_minuto, subreddit, times, media_mode),
         )
 
     def get_config(self, guild_id: int):
