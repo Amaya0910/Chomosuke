@@ -13,10 +13,10 @@ from db.meme_history_repository import SQLiteMemeHistoryRepository
 from services.disboard_classifier import DisboardMessageClassifier
 from services.scheduler import TimerScheduler
 from services.countdown_calculator import CountdownCalculator
+from services.lemmy_video_fetcher import LemmyVideoFetcher
 from services.meme_fetcher import MemeFetcher
 from services.meme_service import MemeService
 from services.meme_source import TIPO_IMAGEN, TIPO_VIDEO
-from services.reddit_video_fetcher import RedditVideoFetcher
 from cogs.bump import BumpCog
 from cogs.bump_config_commands import BumpConfigCog
 from cogs.alarm import AlarmCog
@@ -51,7 +51,7 @@ class BumpBot(commands.Bot):
         self.meme_service = MemeService(
             sources={
                 TIPO_IMAGEN: MemeFetcher(),
-                TIPO_VIDEO: RedditVideoFetcher(),
+                TIPO_VIDEO: LemmyVideoFetcher(),
             },
             history=self.meme_history_repo,
         )
