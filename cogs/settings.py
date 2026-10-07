@@ -29,6 +29,14 @@ def _formatear_segundos(total: int) -> str:
     return " ".join(partes)
 
 
+def _formatear_fuente(valor: str | None) -> str:
+    """Una comunidad de Lemmy lleva '@' y se muestra como !nombre@instancia;
+    cualquier otro valor es un subreddit y se muestra como r/nombre."""
+    if not valor:
+        return "Aleatoria"
+    return f"!{valor}" if "@" in valor else f"r/{valor}"
+
+
 class SettingsCog(commands.Cog):
     """Comando /configuracion: muestra en un mensaje público toda la
     configuración actual del bot en el servidor. Solo lee; no modifica nada.
@@ -102,7 +110,7 @@ class SettingsCog(commands.Cog):
             f"**Tipo:** {cfg['media_mode']}\n"
             f"**Memes al día:** {len(horarios)}\n"
             f"**Horarios (UTC):** {horarios_txt}\n"
-            f"**Subreddit:** {('r/' + cfg['subreddit']) if cfg['subreddit'] else 'Aleatorio en español'}"
+            f"**Fuente fija:** {_formatear_fuente(cfg['subreddit'])}"
         )
 
     @app_commands.command(name="configuracion", description="Muestra la configuración actual del bot en este servidor")
