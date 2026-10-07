@@ -9,10 +9,14 @@ from config import Config
 from db.database import Database
 from db.repositories import SQLiteGuildConfigRepository, SQLiteMemeConfigRepository
 from db.countdown_repository import SQLiteCountdownConfigRepository
+from db.meme_history_repository import SQLiteMemeHistoryRepository
 from services.disboard_classifier import DisboardMessageClassifier
 from services.scheduler import TimerScheduler
 from services.countdown_calculator import CountdownCalculator
 from services.meme_fetcher import MemeFetcher
+from services.meme_service import MemeService
+from services.meme_source import TIPO_IMAGEN, TIPO_VIDEO
+from services.reddit_video_fetcher import RedditVideoFetcher
 from cogs.bump import BumpCog
 from cogs.bump_config_commands import BumpConfigCog
 from cogs.alarm import AlarmCog
@@ -40,10 +44,17 @@ class BumpBot(commands.Bot):
         self.repo = SQLiteGuildConfigRepository(self.database)
         self.countdown_repo = SQLiteCountdownConfigRepository(self.database)
         self.meme_repo = SQLiteMemeConfigRepository(self.database)
+        self.meme_history_repo = SQLiteMemeHistoryRepository(self.database)
         self.scheduler = TimerScheduler()
         self.classifier = DisboardMessageClassifier()
         self.countdown_calculator = CountdownCalculator(config.countdown_start, config.countdown_end)
-        self.meme_fetcher = MemeFetcher()
+        self.meme_service = MemeService(
+            sources={
+                TIPO_IMAGEN: MemeFetcher(),
+                TIPO_VIDEO: RedditVideoFetcher(),
+            },
+            history=self.meme_history_repo,
+        )
 
     async def setup_hook(self):
         await self.add_cog(BumpCog(self, self.config, self.repo, self.scheduler, self.classifier))
@@ -51,7 +62,7 @@ class BumpBot(commands.Bot):
         await self.add_cog(AlarmCog(self, self.scheduler))
         await self.add_cog(CountdownConfigCog(self, self.countdown_repo))
         await self.add_cog(CountdownCog(self, self.countdown_repo, self.countdown_calculator))
-        await self.add_cog(MemeCog(self, self.meme_repo, self.meme_fetcher))
+        await self.add_cog(MemeCog(self, self.meme_repo, self.meme_service))
         await self.add_cog(
             SettingsCog(
                 self,
