@@ -44,7 +44,9 @@ class MemeFetcher(MemeSource):
         subreddit: str | None = None,
         excluir: Collection[str] = frozenset(),
     ) -> dict | None:
-        if subreddit:
+        # Una comunidad de Lemmy lleva "@" y no es un subreddit: se ignora
+        # aquí y se usa la lista por defecto.
+        if subreddit and "@" not in subreddit:
             return await self._buscar_en(subreddit, excluir)
 
         candidatos = random.sample(
