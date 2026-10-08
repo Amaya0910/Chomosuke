@@ -8,7 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from services.meme_service import MemeService
+from services.meme_service import MemeService, ResultadoMeme
 from services.meme_source import TIPO_VIDEO
 
 logger = logging.getLogger("bump-bot")
@@ -34,6 +34,21 @@ def _origen(meme: dict) -> str:
     """Texto que indica de dónde viene el meme: lo define la propia fuente
     ('origen') y, si no lo trae, se asume un subreddit."""
     return meme.get("origen") or f"r/{meme['subreddit']}"
+
+
+def _mensaje_sin_meme(resultado: ResultadoMeme, tipo: str) -> str:
+    """Explica al usuario por qué no llegó un meme, distinguiendo si la
+    fuente falló o si simplemente no hay nada nuevo."""
+    if resultado.fuente_fallo:
+        return (
+            "⚠️ La fuente de memes no respondió bien (error de conexión o del servicio). "
+            "Intenta de nuevo en un momento; el detalle quedó en el log."
+        )
+    contenido = "videos" if tipo == TIPO_VIDEO else "memes"
+    return (
+        f"No hay {contenido} nuevos por ahora: la fuente respondió bien, "
+        f"pero no tiene ninguno que no se haya enviado ya. Intenta más tarde."
+    )
 
 
 class MemeCog(commands.Cog):
@@ -101,17 +116,13 @@ class MemeCog(commands.Cog):
             )
             return
 
-        meme = await self.service.siguiente(interaction.guild_id, subreddit or cfg["subreddit"], tipo)
-        if meme is None:
-            await interaction.followup.send(
-                "No encontré un meme nuevo ahora mismo (la fuente falló o ya se enviaron todos los disponibles). "
-                "Intenta de nuevo en un momento.",
-                ephemeral=True,
-            )
+        resultado = await self.service.siguiente(interaction.guild_id, subreddit or cfg["subreddit"], tipo)
+        if resultado.meme is None:
+            await interaction.followup.send(_mensaje_sin_meme(resultado, tipo), ephemeral=True)
             return
 
         try:
-            await self._publicar(cfg, meme)
+            await self._publicar(cfg, resultado.meme)
         except discord.NotFound:
             await interaction.followup.send(
                 "El webhook configurado ya no existe (puede que lo hayan borrado del canal). "
@@ -184,25 +195,38 @@ class MemeCog(commands.Cog):
     async def meme_video(self, interaction: discord.Interaction, comunidad: str | None = None):
         await self._enviar_ahora(interaction, TIPO_VIDEO, comunidad)
 
+    async def _procesar_envio_diario(self, cfg, ahora: str) -> None:
+        """Publica el meme de un servidor si le toca a esta hora."""
+        horarios = (cfg["times"] or "").split(",")
+        if ahora not in horarios:
+            return
+
+        guild_id = cfg["guild_id"]
+        resultado = await self.service.siguiente(guild_id, cfg["subreddit"], cfg["media_mode"])
+        if resultado.meme is None:
+            if resultado.fuente_fallo:
+                logger.warning(f"[{guild_id}] La fuente de memes falló a las {ahora} UTC; se omite este envío.")
+            else:
+                logger.info(f"[{guild_id}] No hay memes nuevos a las {ahora} UTC; se omite este envío.")
+            return
+
+        try:
+            await self._publicar(cfg, resultado.meme)
+        except discord.NotFound:
+            logger.warning(f"Webhook inválido para guild {guild_id}, fue borrado del canal.")
+        except Exception as e:
+            logger.error(f"Error enviando meme a guild {guild_id}: {e}")
+
     @tasks.loop(minutes=1)
     async def daily_meme(self):
         ahora = datetime.datetime.utcnow().strftime("%H:%M")
         for cfg in self.repo.get_all_configs():
-            horarios = (cfg["times"] or "").split(",")
-            if ahora not in horarios:
-                continue
-
-            meme = await self.service.siguiente(cfg["guild_id"], cfg["subreddit"], cfg["media_mode"])
-            if meme is None:
-                logger.warning(f"[{cfg['guild_id']}] No se encontró un meme nuevo para las {ahora} UTC.")
-                continue
-
             try:
-                await self._publicar(cfg, meme)
-            except discord.NotFound:
-                logger.warning(f"Webhook inválido para guild {cfg['guild_id']}, fue borrado del canal.")
-            except Exception as e:
-                logger.error(f"Error enviando meme a guild {cfg['guild_id']}: {e}")
+                await self._procesar_envio_diario(cfg, ahora)
+            except Exception:
+                # Un error inesperado en un servidor no debe detener el loop
+                # ni los envíos de los demás.
+                logger.exception(f"[{cfg['guild_id']}] Error inesperado en el envío diario de memes.")
 
     @daily_meme.before_loop
     async def before_daily_meme(self):
