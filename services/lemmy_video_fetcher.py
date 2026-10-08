@@ -2,12 +2,12 @@
 
 import logging
 import random
-from typing import Collection
+from typing import Collection, Sequence
 from urllib.parse import urlparse
 
 import aiohttp
 
-from services.meme_source import TIPO_VIDEO, MemeSource
+from services.meme_source import TIPO_VIDEO, MemeSource, MemeSourceError, primero_disponible
 
 logger = logging.getLogger("bump-bot")
 
@@ -21,21 +21,19 @@ MAX_COMUNIDADES_A_PROBAR = 3
 TIPOS_VIDEO = ("video/mp4", "video/webm", "video/quicktime")
 EXTENSIONES_VIDEO = (".mp4", ".webm", ".mov")
 
-# Comunidades donde buscar videos, con formato "nombre@instancia". Si una no
-# existe verás un 404 en el log: quítala o cámbiala sin tocar nada más.
-COMUNIDADES = [
-    "memes@lemmy.world",
-    "lemmyshitpost@lemmy.world",
-    "funny@lemmy.world",
-]
-
 
 class LemmyVideoFetcher(MemeSource):
     """Obtiene memes en video desde la API pública de Lemmy (sin clave).
 
     Solo acepta posts cuyo enlace sea un archivo de video directo
     (mp4/webm/mov), que Discord reproduce con su propio reproductor.
+    Las comunidades (formato "nombre@instancia") se reciben por constructor.
     """
+
+    def __init__(self, comunidades: Sequence[str]):
+        if not comunidades:
+            raise ValueError("Debes indicar al menos una comunidad de Lemmy.")
+        self.comunidades = tuple(comunidades)
 
     async def get_meme(
         self,
@@ -48,31 +46,33 @@ class LemmyVideoFetcher(MemeSource):
             candidatas = [subreddit]
         else:
             candidatas = random.sample(
-                COMUNIDADES, k=min(MAX_COMUNIDADES_A_PROBAR, len(COMUNIDADES))
+                self.comunidades, k=min(MAX_COMUNIDADES_A_PROBAR, len(self.comunidades))
             )
-
-        for comunidad in candidatas:
-            meme = await self._buscar_en(comunidad, excluir)
-            if meme is not None:
-                return meme
-        return None
+        return await primero_disponible(candidatas, lambda c: self._buscar_en(c, excluir))
 
     async def _buscar_en(self, comunidad: str, excluir: Collection[str]) -> dict | None:
         posts = await self._pedir_posts(comunidad)
         random.shuffle(posts)
 
+        videos = repetidos = 0
         for item in posts:
             meme = self._normalizar(item, comunidad)
             if meme is None:
                 continue
+            videos += 1
             if meme["post_link"] in excluir or meme["media_url"] in excluir:
+                repetidos += 1
                 continue
             return meme
 
-        logger.info(f"{comunidad}: no hay videos nuevos disponibles.")
+        logger.info(
+            f"{comunidad}: {len(posts)} posts revisados, {videos} videos, "
+            f"{repetidos} ya enviados. No hay nada nuevo que enviar."
+        )
         return None
 
     async def _pedir_posts(self, comunidad: str) -> list[dict]:
+        """Pide posts a Lemmy. Lanza MemeSourceError si la fuente falla."""
         nombre, _, instancia = comunidad.partition("@")
         instancia = instancia or INSTANCIA_POR_DEFECTO
         url = f"https://{instancia}/api/v3/post/list"
@@ -90,16 +90,18 @@ class LemmyVideoFetcher(MemeSource):
                 ) as resp:
                     if resp.status != 200:
                         logger.warning(f"Lemmy respondió {resp.status} para {comunidad}")
-                        return []
+                        raise MemeSourceError(f"HTTP {resp.status}")
                     data = await resp.json()
+        except MemeSourceError:
+            raise
         except Exception as e:
-            logger.error(f"Error obteniendo videos de {comunidad}: {e}")
-            return []
+            logger.error(f"Error de conexión con Lemmy ({comunidad}): {e}")
+            raise MemeSourceError(str(e)) from e
 
         posts = data.get("posts") if isinstance(data, dict) else None
         if not isinstance(posts, list):
-            logger.warning(f"Respuesta de Lemmy con formato inesperado para {comunidad}")
-            return []
+            logger.warning(f"Lemmy devolvió un formato inesperado para {comunidad}")
+            raise MemeSourceError("formato inesperado")
         return posts
 
     @classmethod

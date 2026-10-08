@@ -6,7 +6,7 @@ from typing import Collection
 
 import aiohttp
 
-from services.meme_source import TIPO_IMAGEN, MemeSource
+from services.meme_source import TIPO_IMAGEN, MemeSource, MemeSourceError, primero_disponible
 
 logger = logging.getLogger("bump-bot")
 
@@ -47,51 +47,56 @@ class MemeFetcher(MemeSource):
         # Una comunidad de Lemmy lleva "@" y no es un subreddit: se ignora
         # aquí y se usa la lista por defecto.
         if subreddit and "@" not in subreddit:
-            return await self._buscar_en(subreddit, excluir)
-
-        candidatos = random.sample(
-            SPANISH_SUBREDDITS, k=min(MAX_SUBREDDITS_A_PROBAR, len(SPANISH_SUBREDDITS))
-        )
-        for elegido in candidatos:
-            meme = await self._buscar_en(elegido, excluir)
-            if meme is not None:
-                return meme
-        return None
+            candidatos = [subreddit]
+        else:
+            candidatos = random.sample(
+                SPANISH_SUBREDDITS, k=min(MAX_SUBREDDITS_A_PROBAR, len(SPANISH_SUBREDDITS))
+            )
+        return await primero_disponible(candidatos, lambda sub: self._buscar_en(sub, excluir))
 
     async def _buscar_en(self, subreddit: str, excluir: Collection[str]) -> dict | None:
         items = await self._pedir_lote(subreddit)
         random.shuffle(items)
 
+        validos = repetidos = 0
         for item in items:
             meme = self._normalizar(item)
             if meme is None:
                 continue
+            validos += 1
             if meme["post_link"] in excluir or meme["media_url"] in excluir:
+                repetidos += 1
                 continue
             return meme
 
-        logger.info(f"r/{subreddit}: no hay memes nuevos en este lote.")
+        logger.info(
+            f"r/{subreddit}: {len(items)} memes revisados, {validos} válidos, "
+            f"{repetidos} ya enviados. No hay nada nuevo que enviar."
+        )
         return None
 
     async def _pedir_lote(self, subreddit: str) -> list[dict]:
+        """Pide un lote a la API. Lanza MemeSourceError si la fuente falla."""
         url = f"{MEME_API_URL}/{subreddit}/{TAMANO_LOTE}"
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     if resp.status != 200:
-                        logger.warning(f"Meme API respondió {resp.status} para r/{subreddit}")
-                        return []
+                        logger.warning(f"La fuente de imágenes respondió {resp.status} para r/{subreddit}")
+                        raise MemeSourceError(f"HTTP {resp.status}")
                     data = await resp.json()
+        except MemeSourceError:
+            raise
         except Exception as e:
-            logger.error(f"Error obteniendo memes de r/{subreddit}: {e}")
-            return []
+            logger.error(f"Error de conexión con la fuente de imágenes (r/{subreddit}): {e}")
+            raise MemeSourceError(str(e)) from e
 
         if "memes" in data:
             return list(data["memes"])
         if "url" in data:
             return [data]
-        logger.warning(f"Respuesta sin memes válidos para r/{subreddit}")
-        return []
+        logger.warning(f"La fuente de imágenes devolvió un formato inesperado para r/{subreddit}")
+        raise MemeSourceError("formato inesperado")
 
     @staticmethod
     def _normalizar(item: dict) -> dict | None:
