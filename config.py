@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Comunidades de Lemmy por defecto para los videos (formato nombre@instancia).
+DEFAULT_LEMMY_COMUNIDADES = "memes@lemmy.world,lemmyshitpost@lemmy.world,funny@lemmy.world"
+
 
 @dataclass(frozen=True)
 class Config:
@@ -18,6 +21,19 @@ class Config:
     bump_emoji: str
     countdown_start: date
     countdown_end: date
+    lemmy_communities: tuple[str, ...]
+
+    @staticmethod
+    def _parse_comunidades(raw: str) -> tuple[str, ...]:
+        comunidades = tuple(c.strip() for c in raw.split(",") if c.strip())
+        invalidas = [c for c in comunidades if "@" not in c]
+        if not comunidades or invalidas:
+            raise RuntimeError(
+                "LEMMY_COMUNIDADES debe tener al menos una comunidad con formato nombre@instancia, "
+                "separadas por coma (ej. memes@lemmy.world,funny@lemmy.world)."
+                + (f" Valores inválidos: {', '.join(invalidas)}." if invalidas else "")
+            )
+        return comunidades
 
     @staticmethod
     def from_env() -> "Config":
@@ -41,4 +57,7 @@ class Config:
             bump_emoji=emoji,
             countdown_start=date(2026, 8, 1),
             countdown_end=date(2027, 8, 1),
+            lemmy_communities=Config._parse_comunidades(
+                os.getenv("LEMMY_COMUNIDADES", DEFAULT_LEMMY_COMUNIDADES)
+            ),
         )
