@@ -51,7 +51,7 @@ class BumpBot(commands.Bot):
         self.meme_service = MemeService(
             sources={
                 TIPO_IMAGEN: MemeFetcher(),
-                TIPO_VIDEO: LemmyVideoFetcher(),
+                TIPO_VIDEO: LemmyVideoFetcher(config.lemmy_communities),
             },
             history=self.meme_history_repo,
         )
